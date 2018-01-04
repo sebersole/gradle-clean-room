@@ -15,7 +15,7 @@ class BaseModulePlugin implements Plugin<Project> {
 }
 
 class BaseModuleExtension {
-	final String hibernateVersion = '1.0.0-SNAPSHOT'
+	final String hibernateVersion = '1.0.0.Final'
 
 	final String[] hibernateVersionComponents = hibernateVersion.split( '\\.' )
 	final String hibernateMajorMinorVersion = hibernateVersionComponents[0] + '.' + hibernateVersionComponents[1]

@@ -1,4 +1,4 @@
-apply from: '../gradle/java-module.gradle'
+apply from: rootProject.file( 'gradle/published-java-module.gradle' )
 
 javaModule {
     moduleDescription 'Hibernate\'s core ORM functionality'

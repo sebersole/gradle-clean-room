@@ -30,10 +30,6 @@ class JavaModulePlugin implements Plugin<Project> {
 
 		// Apply the configuration to the project
 		project.afterEvaluate {
-			if ( !extension.moduleDescription ) {
-				throw new InvalidUserDataException( "Module description was not configured" )
-			}
-
 			project.configure( project ) {
 				group = 'org.hibernate.sebersole.gcr'
 
@@ -197,6 +193,12 @@ class JavaModulePlugin implements Plugin<Project> {
 				}
 
 				jar {
+					doFirst {
+						if ( !extension.moduleDescription ) {
+							throw new InvalidUserDataException( "Module description was not configured" )
+						}
+					}
+
 					manifest = osgiManifest {
 						// GRADLE-1411: Even if we override Imports and Exports
 						// auto-generation with instructions, classesDir and classpath

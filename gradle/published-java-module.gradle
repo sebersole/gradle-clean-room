@@ -1,0 +1,198 @@
+/*
+ * Hibernate, Relational Persistence for Idiomatic Java
+ *
+ * License: GNU Lesser General Public License (LGPL), version 2.1 or later
+ * See the lgpl.txt file in the root directory or http://www.gnu.org/licenses/lgpl-2.1.html
+ */
+
+apply from: rootProject.file( 'gradle/java-module.gradle' )
+
+apply plugin: 'maven-publish'
+apply plugin: 'com.jfrog.bintray'
+
+apply plugin: PublishedJavaModulePlugin
+
+apply plugin: 'maven-publish-auth'
+
+
+class PublishedJavaModulePlugin implements Plugin<Project> {
+	// todo : consider stashing the base pom information on the root project and accessing from there for each subproject (perf)
+
+	@Override
+	void apply(Project project) {
+		Jar sourcesJarTask = project.tasks.create( 'sourcesJar', Jar )
+		project.configure( sourcesJarTask ) {
+			from project.sourceSets.main.allSource
+			manifest = project.tasks.jar.manifest
+			classifier = 'sources'
+		}
+
+		Jar javadocJarTask = project.tasks.create( 'javadocJar', Jar )
+		project.configure( javadocJarTask ) {
+			from project.tasks.javadoc.outputs
+			manifest = project.tasks.jar.manifest
+			classifier = 'javadoc'
+		}
+
+		project.configure( project ) {
+			publishing {
+				publications {
+					mavenJava( MavenPublication ) {
+						from components.java
+
+						artifact( sourcesJar ) {
+							classifier 'sources'
+						}
+
+						artifact( javadocJar ) {
+							classifier "javadoc"
+						}
+					}
+				}
+				// done here so that maven-publish-auth plugin can see the repo to apply auth details
+				repositories {
+					maven {
+						name 'jboss-snapshots-repository'
+						url 'https://repository.jboss.org/nexus/content/repositories/snapshots'
+					}
+				}
+			}
+
+			bintray {
+				user = project.property( 'PERSONAL_BINTRAY_USER' )
+				key = project.property( 'PERSONAL_BINTRAY_API_KEY' )
+
+				publications = ['mavenJava']
+
+				publish = false
+
+				pkg {
+					userOrg = user
+					repo = 'maven'
+					name = 'hibernate-orm-gradle-clean-room'
+					version {
+						name = version
+						gpg {
+							sign = true
+						}
+						attributes = [
+								'jpa': '2.2',
+								'family': project.hibernateMajorMinorVersion
+						]
+					}
+				}
+			}
+
+			model {
+				tasks.generatePomFileForMavenJavaPublication {
+					destination = file( "${buildDir}/generated-pom.xml" )
+				}
+			}
+		}
+
+		project.afterEvaluate {
+			PublishingExtension gradlePublishingExtension = project.extensions.getByType( PublishingExtension )
+
+			applyPomCustomization( project, gradlePublishingExtension )
+
+			if ( project.version.endsWith( 'SNAPSHOT' ) ) {
+				applySnapshotPublishing( project, gradlePublishingExtension )
+			}
+			else {
+				applyReleasePublishing( project, gradlePublishingExtension )
+			}
+		}
+	}
+
+	private void applyPomCustomization(Project project, PublishingExtension gradlePublishingExtension) {
+		Set<MavenPublication> mavenPublications = gradlePublishingExtension.publications.withType( MavenPublication )
+		if ( mavenPublications.size() < 0 || mavenPublications.size() > 1 ) {
+			throw new GradleException( "Expecting just a single MavenPublication : " + project.path )
+		}
+
+		project.configure( mavenPublications.first() ) {
+			pom.withXml {
+				asNode().appendNode( 'name', name )
+				asNode().appendNode( 'description', project.description )
+
+				Node licensesNode = asNode().appendNode( "licenses" )
+
+				Node lgplLicenseNode = licensesNode.appendNode( "license" )
+				lgplLicenseNode.appendNode( 'name', 'GNU Lesser General Public License' )
+				lgplLicenseNode.appendNode( 'url', 'http://www.gnu.org/licenses/lgpl-2.1.html' )
+				lgplLicenseNode.appendNode(
+						'comments',
+						'See discussion at http://hibernate.org/license for more details.'
+				)
+				lgplLicenseNode.appendNode( 'distribution', 'repo' )
+
+				Node aplLicenseNode = licensesNode.appendNode( "license" )
+				aplLicenseNode.appendNode( 'name', 'Apache License, Version 2.0' )
+				aplLicenseNode.appendNode( 'url', 'http://www.apache.org/licenses/LICENSE-2.0.txt' )
+				aplLicenseNode.appendNode( 'distribution', 'repo' )
+
+				asNode().children().last() + {
+					url 'http://hibernate.org'
+					organization {
+						name 'Hibernate.org'
+						url 'http://hibernate.org'
+					}
+					issueManagement {
+						system 'jira'
+						url 'https://hibernate.atlassian.net/browse/HHH'
+					}
+					scm {
+						url 'http://github.com/hibernate/hibernate-orm'
+						connection 'scm:git:http://github.com/hibernate/hibernate-orm.git'
+						developerConnection 'scm:git:git@github.com:hibernate/hibernate-orm.git'
+					}
+					developers {
+						developer {
+							id 'hibernate-team'
+							name 'The Hibernate Development Team'
+							organization 'Hibernate.org'
+							organizationUrl 'http://hibernate.org'
+						}
+					}
+				}
+
+				// TEMPORARY : currently Gradle Publishing feature is exporting dependencies as 'runtime' scope,
+				//      rather than 'compile'; fix that.
+				if ( asNode().dependencies != null && asNode().dependencies.size() > 0 ) {
+					asNode().dependencies[0].dependency.each {
+						it.scope[0].value = 'compile'
+					}
+				}
+			}
+		}
+	}
+
+	private void applySnapshotPublishing(Project project, PublishingExtension gradlePublishingExtension) {
+//		gradlePublishingExtension.repositories.maven {
+//			name 'jboss-snapshots-repository'
+//			url 'https://repository.jboss.org/nexus/content/repositories/snapshots'
+//		}
+
+		project.configure( project ) {
+			tasks.bintrayUpload {
+				enabled = false
+
+				doFirst {
+					throw new PublishException(
+							"Cannot publish SNAPSHOT versions to Bintray (bintrayUpload task was requested)"
+					)
+				}
+			}
+		}
+	}
+
+	private void applyReleasePublishing(Project project, PublishingExtension publishingExtension) {
+		// force publishing to only be available via `bintrayUpload` task
+		//	todo : an alternative would be to wire `publish` to do the `bintrayUpload`
+		project.configure( project ) {
+			tasks.publish.enabled = false
+// todo : no idea why this is not found
+//			tasks.'publishMavenJavaPublicationToJboss-snapshots-repositoryRepository'.enabled = false
+		}
+	}
+}
