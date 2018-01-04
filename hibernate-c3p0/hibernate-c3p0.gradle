@@ -1,0 +1,10 @@
+apply from: '../gradle/java-module.gradle'
+
+javaModule {
+    moduleDescription 'Support for using the C3P0 connection pool as a Hibernate ConnectionProvider'
+}
+
+dependencies {
+    compile project( ':hibernate-core' )
+    testCompile group: 'junit', name: 'junit', version: '4.12'
+}

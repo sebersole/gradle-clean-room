@@ -1,0 +1,9 @@
+apply from: '../gradle/java-module.gradle'
+
+javaModule {
+    moduleDescription 'Hibernate\'s core ORM functionality'
+}
+
+dependencies {
+    testCompile group: 'junit', name: 'junit', version: '4.12'
+}
